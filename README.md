@@ -1,15 +1,13 @@
 # Summary
 
-Gmail backend engineers ask for the WebApp to limit the number of `fetchInboxContent()` calls from the WebApp
+Backend engineers ask for the WebApp to limit the number of `fetchInboxContent()` calls from the WebApp
 to the server, as logging shows that users click the __Refresh__ button multiple times in short bursts (e.g. 5 clicks in a span of .5 second).
 
 How can we achieve this?
 
 ## Follow-up Modification
 
-Ensure that the first call causes a refresh to occur, but that ensuing calls do _not_ cancel that original call.
-
-However, after the _first_ call is made, it is okay to have each follow-up call delay the refresh call until the rapid clicking has ceased.
+During the exercise it was requested to modify the behavior so that only the initial fetch call executes immediately, and that throttling affects all subsequent calls (even if no timeout is currently in progress).
 
 So should end up with just 2 calls made (rather than 7).
 
@@ -56,4 +54,39 @@ The output for the test should demonstrate the following:
 
   refreshing inbox (time #2)
 
+```
+
+## Afterparty Modification
+
+Although the "pristine check" met the follow-up requirement, I don't think I'd personally ship that to production if I were tasked with the whole refresh throttling feature. Instead I would have the feature make an immediate fetch as long as a timeout isn't in progress.
+
+Essentially:
+
+- If no timeout is in progress, make the fetch call _and_ create a "noop" timeout (one which will not make a fetch call when it elapses)
+- If a timeout _is_ in progress, clear it (because we have to assume it may make a fetch call when finished) and replace it with a timeout which _will_ execute another fetch call when done
+
+Here's an output summary (from running `node test_revised.js`)
+
+```
+0s: click() ->
+ server is called
+
+  refreshing inbox (time #1)
+
+2.5s: click() ->
+ server is called immediate (no timeouts in progress)
+
+  refreshing inbox (time #2)
+
+3s: click() ->
+ we throttle (because a timeout is in progress)
+
+  Canceling delayed call and creating a new delayed call
+
+4s: click() ->
+ we throttle again (but server is called after timeout elapses)
+
+  Canceling delayed call and creating a new delayed call
+
+  refreshing inbox (time #3)
 ```
